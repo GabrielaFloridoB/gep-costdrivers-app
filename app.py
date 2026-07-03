@@ -13,6 +13,31 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── Verificação de senha ───────────────────────────────────────────────────────
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if st.session_state["authenticated"]:
+        return True
+
+    st.title("🔒 GEP – Cost Drivers Database Export")
+    st.markdown("Digite a senha para acessar o app.")
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        password = st.text_input("Senha", type="password", placeholder="Digite a senha...")
+        if st.button("Entrar", use_container_width=True):
+            if password == st.secrets["app"]["password"]:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta. Tente novamente.")
+    return False
+
+if not check_password():
+    st.stop()
+
 # ── Styling ────────────────────────────────────────────────────────────────────
 HEADER_FILL   = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
 HEADER_FONT   = Font(name="Arial", bold=True, color="FFFFFF", size=10)
@@ -47,7 +72,6 @@ COLUMN_GLOSSARY = [
     ("Frequency of publication source", "The frequency with which the original source publishes its data."),
 ]
 
-# Mapeamento: coluna Excel → coluna Databricks
 DB_COLUMN_MAP = {
     "ID":                              "IndiceID",
     "Indicator":                       "Indice_1",
@@ -59,7 +83,7 @@ DB_COLUMN_MAP = {
     "Group":                           "IndiceGrupo_1",
     "LastDateUpdated":                 "LastUpdateDate",
     "Last forecast update":            "LastUpdateDatePrediction",
-    "Frequency of publication source": None,  # vem do Excel de referência
+    "Frequency of publication source": None,
 }
 
 OUTPUT_COLUMNS = list(DB_COLUMN_MAP.keys())
@@ -165,7 +189,6 @@ def load_from_databricks(filters: dict) -> pd.DataFrame:
 
 # ── Merge com Excel de referência ──────────────────────────────────────────────
 def merge_frequency(df: pd.DataFrame, ref_file) -> pd.DataFrame:
-    """Cruza pelo ID e preenche Frequency of publication source do Excel antigo."""
     ref = pd.read_excel(ref_file, sheet_name="result", usecols=["ID", "Frequency of publication source"])
     ref["ID"] = ref["ID"].astype(str)
     df["ID"]  = df["ID"].astype(str)
@@ -181,10 +204,7 @@ st.caption("Busca os dados mais atualizados do Databricks e gera o Excel padroni
 
 with st.sidebar:
     st.header("📁 Arquivo de referência")
-    st.markdown(
-        "Faça upload do Excel anterior para preservar a coluna "
-        "**Frequency of publication source** dos indicadores já existentes."
-    )
+    st.markdown("Faça upload do Excel anterior para preservar a coluna **Frequency of publication source**.")
     ref_file = st.file_uploader("Excel de referência (opcional)", type=["xlsx", "xls"])
     if ref_file:
         st.success("✅ Arquivo carregado!")
@@ -205,14 +225,12 @@ if load_btn:
     with st.spinner("Conectando ao Databricks e carregando dados…"):
         try:
             df = load_from_databricks(filters)
-
             if ref_file:
                 with st.spinner("Cruzando com o arquivo de referência…"):
                     df = merge_frequency(df, ref_file)
                 filled = (df["Frequency of publication source"] != "").sum()
                 empty  = (df["Frequency of publication source"] == "").sum()
                 st.info(f"📋 {filled:,} indicadores com frequência preservada | {empty:,} novos (vazios)")
-
             st.session_state["df"] = df
             st.success(f"✅ {len(df):,} registros carregados.")
         except Exception as e:
