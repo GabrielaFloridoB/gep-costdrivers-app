@@ -1,0 +1,5 @@
+streamlit
+openpyxl
+databricks-sql-connector
+sqlalchemy
+pymysql
